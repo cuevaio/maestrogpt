@@ -1,3 +1,5 @@
+import { openai } from "@ai-sdk/openai";
+import { generateText } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 
 // WhatsApp API configuration
@@ -72,14 +74,19 @@ export async function POST(request: NextRequest) {
 // Function to send reply message
 async function sendReplyMessage(to: string, originalContent: string) {
 	try {
-		const replyMessage = `content readed: ${originalContent}`;
+		const { text } = await generateText({
+			model: openai("gpt-4.1-nano"),
+			system:
+				"Your name is MaestroGPT. Your role is to answer questions about construction. Answer in natural, easy to follow language. Your target users are builders. Answer in the same language as the quiestion.",
+			prompt: originalContent,
+		});
 
 		const payload = {
 			messaging_product: "whatsapp",
 			to: to,
 			type: "text",
 			text: {
-				body: replyMessage,
+				body: text,
 			},
 		};
 
