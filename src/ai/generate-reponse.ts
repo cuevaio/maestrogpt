@@ -104,7 +104,7 @@ export async function generateResponse(
 							// Sort by relevance score and take top 6 chunks
 							const sortedChunks = Array.from(relevantChunks.values())
 								.sort((a, b) => b.score - a.score)
-								.slice(0, 6);
+								.slice(0, 10);
 
 							// For each relevant chunk, get previous and next chunks for context
 							const chunksWithContext = await Promise.all(
