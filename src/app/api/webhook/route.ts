@@ -134,7 +134,7 @@ async function downloadWhatsAppMedia(mediaId: string): Promise<string | null> {
 }
 
 // Function to send reply message
-export async function sendReplyMessage(
+async function sendReplyMessage(
 	to: string,
 	originalContent: string,
 	imageId?: string | null,
