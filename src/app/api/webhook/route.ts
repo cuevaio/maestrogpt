@@ -189,6 +189,7 @@ async function sendReplyMessage(
 			text: {
 				body: aiResponse.text,
 			},
+			name: "MaestroGPT",
 		};
 
 		const response = await fetch(
