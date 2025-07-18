@@ -3,6 +3,7 @@ import { openai } from "@ai-sdk/openai";
 import { z } from "zod";
 import { vector } from "@/clients/vector";
 import { downloadWhatsAppMedia } from "@/lib/download-whatsapp-media";
+import { SYSTEM_PROMPT } from "./system-prompt";
 
 // Function to send reply message
 export async function generateResponse(
@@ -13,8 +14,7 @@ export async function generateResponse(
 		const messages: CoreMessage[] = [
 			{
 				role: "system",
-				content:
-					"You are a helpful assistant that can answer questions and help with tasks related to construction. Answer in natural, easy to follow language. Your target users are builders. Answer in the same language as the question. Your name is MaestroGPT. You have access to a knowledge base of construction-related information. You can use the searchKnowledge tool to search the knowledge base for relevant information. The knowledge is from 'REGLAMENTO NACIONAL DE EDIFICACIONES' from the Peruvian Ministry of Housing, Construction and Sanitation. Always indicate which pages of the knowledge base were used to answer the question. When needed, add a disclaimer that the information is based on the knowledge base and may not be up to date. Also, add a disclaimer that the information is not a substitute for professional advice. You are not allowed to answer questions that are not related to construction.",
+				content: SYSTEM_PROMPT,
 			},
 		];
 
@@ -61,103 +61,129 @@ export async function generateResponse(
 					}),
 					execute: async ({ queries }) => {
 						try {
+							// Search for relevant chunks
 							const results = await Promise.all(
 								queries.map((query) =>
 									vector.query<{
 										pageIndex: number;
 										chunkIndex: number;
 									}>({
-										topK: 3,
+										topK: 5, // Get more relevant chunks
 										data: query,
 										includeMetadata: true,
 										includeVectors: false,
-										includeData: false,
+										includeData: true, // Get data directly
 									}),
 								),
 							);
 
-							const pagesIndexes: number[] = [];
+							// Collect unique chunks with their context
+							const relevantChunks = new Map<string, {
+								pageIndex: number;
+								chunkIndex: number;
+								content: string;
+								score: number;
+							}>();
+
 							for (const result of results) {
 								for (const r of result) {
-									if (r.metadata?.pageIndex) {
-										pagesIndexes.push(r.metadata.pageIndex);
-									}
-								}
-							}
-
-							const pagesResults = await Promise.all(
-								pagesIndexes.map((pageIndex) =>
-									vector.fetch<{
-										pageIndex: number;
-										chunkIndex: number;
-									}>(
-										{ prefix: `${pageIndex}-` },
-										{
-											includeData: true,
-											includeMetadata: true,
-											includeVectors: false,
-										},
-									),
-								),
-							);
-
-							const pages: {
-								pageIndex: number;
-								chunks: {
-									chunkIndex: number;
-									content: string;
-								}[];
-							}[] = [];
-
-							for (const pageResult of pagesResults) {
-								for (const chunk of pageResult) {
-									if (
-										chunk?.metadata?.pageIndex &&
-										chunk?.metadata?.chunkIndex &&
-										chunk?.data
-									) {
-										if (
-											!pages.find(
-												(p) => p.pageIndex === chunk.metadata?.pageIndex,
-											)
-										) {
-											pages.push({
-												pageIndex: chunk.metadata.pageIndex,
-												chunks: [
-													{
-														chunkIndex: chunk.metadata.chunkIndex,
-														content: chunk.data,
-													},
-												],
+									if (r.metadata?.pageIndex && r.metadata?.chunkIndex && r.data) {
+										const key = `${r.metadata.pageIndex}-${r.metadata.chunkIndex}`;
+										if (!relevantChunks.has(key)) {
+											relevantChunks.set(key, {
+												pageIndex: r.metadata.pageIndex,
+												chunkIndex: r.metadata.chunkIndex,
+												content: r.data,
+												score: r.score || 0,
 											});
-										} else {
-											pages
-												.find((p) => p.pageIndex === chunk.metadata?.pageIndex)
-												?.chunks.push({
-													chunkIndex: chunk.metadata.chunkIndex,
-													content: chunk.data,
-												});
 										}
 									}
 								}
 							}
 
-							let content =
-								"The following is a list of pages that may be relevant to the query:";
+							// Sort by relevance score and take top 6 chunks
+							const sortedChunks = Array.from(relevantChunks.values())
+								.sort((a, b) => b.score - a.score)
+								.slice(0, 6);
 
-							for (const page of pages) {
-								content += `\n# Page ${page.pageIndex}\n`;
+							// For each relevant chunk, get previous and next chunks for context
+							const chunksWithContext = await Promise.all(
+								sortedChunks.map(async (chunk) => {
+									const contextChunks = await Promise.all([
+										// Previous chunk
+										vector.fetch<{
+											pageIndex: number;
+											chunkIndex: number;
+										}>(
+											[`${chunk.pageIndex}-${chunk.chunkIndex - 1}`],
+											{
+												includeData: true,
+												includeMetadata: true,
+												includeVectors: false,
+											},
+										),
+										// Current chunk (already have it but fetch for consistency)
+										vector.fetch<{
+											pageIndex: number;
+											chunkIndex: number;
+										}>(
+											[`${chunk.pageIndex}-${chunk.chunkIndex}`],
+											{
+												includeData: true,
+												includeMetadata: true,
+												includeVectors: false,
+											},
+										),
+										// Next chunk
+										vector.fetch<{
+											pageIndex: number;
+											chunkIndex: number;
+										}>(
+											[`${chunk.pageIndex}-${chunk.chunkIndex + 1}`],
+											{
+												includeData: true,
+												includeMetadata: true,
+												includeVectors: false,
+											},
+										),
+									]);
 
-								content += page.chunks
-									.toSorted((a, b) => a.chunkIndex - b.chunkIndex)
-									.map((chunk) => chunk.content)
-									.join("\n");
+									const contextContent = contextChunks
+										.flat()
+										.filter((c): c is NonNullable<typeof c> & { data: string } => !!c?.data)
+										.sort((a, b) => (a.metadata?.chunkIndex || 0) - (b.metadata?.chunkIndex || 0))
+										.map(c => c.data)
+										.join(" ");
+
+									return {
+										pageIndex: chunk.pageIndex,
+										content: contextContent || chunk.content,
+									};
+								})
+							);
+
+							// Group by page and format output
+							const pageGroups = new Map<number, string[]>();
+							for (const chunk of chunksWithContext) {
+								if (!pageGroups.has(chunk.pageIndex)) {
+									pageGroups.set(chunk.pageIndex, []);
+								}
+								pageGroups.get(chunk.pageIndex)?.push(chunk.content);
 							}
 
-							return content;
+							let formattedContent = "Información relevante encontrada:\n\n";
+
+							for (const [pageIndex, contents] of pageGroups) {
+								const uniqueContents = [...new Set(contents)]; // Remove duplicates
+								for (const content of uniqueContents) {
+									formattedContent += `**Encontrado en página ${pageIndex}:**\n${content}\n\n`;
+								}
+							}
+
+							return formattedContent;
 						} catch (error) {
 							console.error("Error searching knowledge base:", error);
-							return "Nothing found";
+							return "No se encontró información relevante en la base de conocimientos.";
 						}
 					},
 				}),
