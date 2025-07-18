@@ -1,5 +1,5 @@
 import { openai } from "@ai-sdk/openai";
-import { generateText } from "ai";
+import { CoreMessage, generateText, Message } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 
 // WhatsApp API configuration
@@ -56,12 +56,16 @@ export async function POST(request: NextRequest) {
 								await sendReplyMessage(from, messageContent, null);
 							} else if (message.type === "image") {
 								const imageId = message.image?.id;
-								console.log(`Image message from ${from}, image ID: ${imageId}`);
+								const caption = message.image?.caption || "";
+								console.log(
+									`Image message from ${from}, image ID: ${imageId}, caption: ${caption}`,
+								);
 
 								if (imageId) {
 									await sendReplyMessage(
 										from,
-										"Analyzing your image...",
+										caption ||
+											"Please analyze this construction-related image and provide helpful insights for builders.",
 										imageId,
 									);
 								}
@@ -134,51 +138,49 @@ async function sendReplyMessage(
 	imageId?: string | null,
 ) {
 	try {
-		let aiResponse: { text: string };
+		const messages: CoreMessage[] = [
+			{
+				role: "system",
+				content:
+					"You are a helpful assistant that can answer questions and help with tasks related to construction. Answer in natural, easy to follow language. Your target users are builders. Answer in the same language as the question. Your name is MaestroGPT.",
+			},
+		];
 
 		if (imageId) {
 			// Handle image message
 			const imageData = await downloadWhatsAppMedia(imageId);
 
 			if (!imageData) {
-				aiResponse = {
-					text: "Sorry, I couldn't process your image. Please try again.",
-				};
-			} else {
-				const result = await generateText({
-					model: openai("gpt-4o"),
-					messages: [
-						{
-							role: "user",
-							content: [
-								{
-									type: "text",
-									text:
-										originalContent ||
-										"Please analyze this construction-related image and provide helpful insights for builders.",
-								},
-								{
-									type: "image",
-									image: imageData,
-									providerOptions: {
-										openai: { imageDetail: "low" },
-									},
-								},
-							],
-						},
-					],
-				});
-				aiResponse = result;
+				throw new Error("Failed to download image");
 			}
+
+			messages.push({
+				role: "user",
+				content: [
+					{
+						type: "text",
+						text: originalContent,
+					},
+					{
+						type: "image",
+						image: imageData,
+						providerOptions: {
+							openai: { imageDetail: "low" },
+						},
+					},
+				],
+			});
 		} else {
-			// Handle text message
-			aiResponse = await generateText({
-				model: openai("gpt-4o"),
-				system:
-					"Your name is MaestroGPT. Your role is to answer questions about construction. Answer in natural, easy to follow language. Your target users are builders. Answer in the same language as the question.",
-				prompt: originalContent,
+			messages.push({
+				role: "user",
+				content: originalContent,
 			});
 		}
+
+		const aiResponse = await generateText({
+			model: openai("gpt-4o"),
+			messages: messages,
+		});
 
 		const payload = {
 			messaging_product: "whatsapp",
