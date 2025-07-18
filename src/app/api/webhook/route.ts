@@ -1,6 +1,6 @@
 import { vector } from "@/clients/vector";
 import { openai } from "@ai-sdk/openai";
-import { CoreMessage, generateText, Message, tool } from "ai";
+import { CoreMessage, generateText, tool } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
