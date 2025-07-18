@@ -1,3 +1,8 @@
-import { sendReplyMessage } from "@/app/api/webhook/route";
+import { generateResponse } from "@/ai/generate-reponse";
 
-await sendReplyMessage("120363484700026", "Cuanto debe medir, como minimo, una zapata para una vivienda de 3 pisos?");
+const response = await generateResponse(
+	"Cuanto debe medir, como minimo, una zapata para una vivienda de 3 pisos?",
+	null,
+);
+
+console.log(response);
