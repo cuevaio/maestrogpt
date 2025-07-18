@@ -48,7 +48,9 @@ export async function POST(request: NextRequest) {
 						const messages = change.value?.messages || [];
 
 						for (const message of messages) {
-							from = message.from;
+							if (message.from) {
+								from = message.from;
+							}
 
 							// Process both text and image messages
 							if (message.type === "text") {
@@ -64,6 +66,11 @@ export async function POST(request: NextRequest) {
 					}
 				}
 			}
+		}
+
+		if (!from) {
+			console.log("No from found");
+			return NextResponse.json({ status: "success" }, { status: 200 });
 		}
 
 		const aiResponse = await generateResponse(messageContent, imageId);
