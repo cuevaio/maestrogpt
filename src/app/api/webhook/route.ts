@@ -45,15 +45,26 @@ export async function POST(request: NextRequest) {
 						const messages = change.value?.messages || [];
 
 						for (const message of messages) {
-							// Only process text messages
+							console.log(message);
+
+							const from = message.from;
+
+							// Process both text and image messages
 							if (message.type === "text") {
-								const from = message.from;
 								const messageContent = message.text?.body || "";
+								console.log(`Text message from ${from}: ${messageContent}`);
+								await sendReplyMessage(from, messageContent, null);
+							} else if (message.type === "image") {
+								const imageId = message.image?.id;
+								console.log(`Image message from ${from}, image ID: ${imageId}`);
 
-								console.log(`Message from ${from}: ${messageContent}`);
-
-								// Send reply message
-								await sendReplyMessage(from, messageContent);
+								if (imageId) {
+									await sendReplyMessage(
+										from,
+										"Analyzing your image...",
+										imageId,
+									);
+								}
 							}
 						}
 					}
@@ -71,22 +82,110 @@ export async function POST(request: NextRequest) {
 	}
 }
 
-// Function to send reply message
-async function sendReplyMessage(to: string, originalContent: string) {
+// Function to download media from WhatsApp
+async function downloadWhatsAppMedia(mediaId: string): Promise<string | null> {
 	try {
-		const { text } = await generateText({
-			model: openai("gpt-4.1-nano"),
-			system:
-				"Your name is MaestroGPT. Your role is to answer questions about construction. Answer in natural, easy to follow language. Your target users are builders. Answer in the same language as the quiestion.",
-			prompt: originalContent,
+		// First, get the media URL
+		const mediaResponse = await fetch(
+			`https://graph.facebook.com/v22.0/${mediaId}`,
+			{
+				headers: {
+					Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+				},
+			},
+		);
+
+		if (!mediaResponse.ok) {
+			console.error("Failed to get media URL:", mediaResponse.status);
+			return null;
+		}
+
+		const mediaData = await mediaResponse.json();
+		const mediaUrl = mediaData.url;
+
+		// Download the actual media file
+		const fileResponse = await fetch(mediaUrl, {
+			headers: {
+				Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+			},
 		});
+
+		if (!fileResponse.ok) {
+			console.error("Failed to download media:", fileResponse.status);
+			return null;
+		}
+
+		// Convert to base64
+		const arrayBuffer = await fileResponse.arrayBuffer();
+		const base64 = Buffer.from(arrayBuffer).toString("base64");
+		const mimeType = fileResponse.headers.get("content-type") || "image/jpeg";
+
+		return `data:${mimeType};base64,${base64}`;
+	} catch (error) {
+		console.error("Error downloading media:", error);
+		return null;
+	}
+}
+
+// Function to send reply message
+async function sendReplyMessage(
+	to: string,
+	originalContent: string,
+	imageId?: string | null,
+) {
+	try {
+		let aiResponse: { text: string };
+
+		if (imageId) {
+			// Handle image message
+			const imageData = await downloadWhatsAppMedia(imageId);
+
+			if (!imageData) {
+				aiResponse = {
+					text: "Sorry, I couldn't process your image. Please try again.",
+				};
+			} else {
+				const result = await generateText({
+					model: openai("gpt-4o"),
+					messages: [
+						{
+							role: "user",
+							content: [
+								{
+									type: "text",
+									text:
+										originalContent ||
+										"Please analyze this construction-related image and provide helpful insights for builders.",
+								},
+								{
+									type: "image",
+									image: imageData,
+									providerOptions: {
+										openai: { imageDetail: "low" },
+									},
+								},
+							],
+						},
+					],
+				});
+				aiResponse = result;
+			}
+		} else {
+			// Handle text message
+			aiResponse = await generateText({
+				model: openai("gpt-4o"),
+				system:
+					"Your name is MaestroGPT. Your role is to answer questions about construction. Answer in natural, easy to follow language. Your target users are builders. Answer in the same language as the question.",
+				prompt: originalContent,
+			});
+		}
 
 		const payload = {
 			messaging_product: "whatsapp",
 			to: to,
 			type: "text",
 			text: {
-				body: text,
+				body: aiResponse.text,
 			},
 		};
 
