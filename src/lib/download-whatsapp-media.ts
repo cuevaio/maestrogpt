@@ -8,7 +8,7 @@ export async function downloadWhatsAppMedia(
 			`https://graph.facebook.com/v22.0/${mediaId}`,
 			{
 				headers: {
-					Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+					Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
 				},
 			},
 		);
@@ -24,7 +24,7 @@ export async function downloadWhatsAppMedia(
 		// Download the actual media file
 		const fileResponse = await fetch(mediaUrl, {
 			headers: {
-				Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+				Authorization: `Bearer ${process.env.WHATSAPP_ACCESS_TOKEN}`,
 			},
 		});
 
