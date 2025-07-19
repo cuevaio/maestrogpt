@@ -81,6 +81,8 @@ export async function generateResponse(
       }
     }
 
+    console.log(messages);
+
     // Current message is now included in conversationHistory, so no need to add it again
 
     const aiResponse = await generateText({
