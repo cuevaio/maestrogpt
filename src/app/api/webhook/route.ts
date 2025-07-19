@@ -1,4 +1,5 @@
 import { generateResponse } from "@/ai/generate-reponse";
+import { shouldRespondNow } from "@/ai/should-respond-now";
 import { NextRequest, NextResponse } from "next/server";
 import { getConversationHistory, storeMessage,  } from "@/lib/conversation";
 
@@ -74,9 +75,16 @@ export async function POST(request: NextRequest) {
 			return NextResponse.json({ status: "success" }, { status: 200 });
 		}
 
-
 		// Get conversation history for context
 		const conversationHistory = await getConversationHistory(from);
+
+		// Use AI to decide if we should respond now or wait for more messages
+		const shouldAnswer = await shouldRespondNow(messageContent, conversationHistory);
+
+		if (!shouldAnswer) {
+			console.log("AI decided to wait for more messages");
+			return NextResponse.json({ status: "success" }, { status: 200 });
+		}
 
 		// Store the incoming user message
 		await storeMessage(from, {
