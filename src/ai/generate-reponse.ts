@@ -5,9 +5,18 @@ import { vector } from "@/clients/vector";
 import { downloadWhatsAppMedia } from "@/lib/download-whatsapp-media";
 import { SYSTEM_PROMPT } from "./system-prompt";
 
+// Message interface for conversation history
+export interface ConversationMessage {
+	role: "user" | "assistant";
+	content: string;
+	timestamp: number;
+	imageId?: string;
+}
+
 // Function to send reply message
 export async function generateResponse(
 	originalContent: string,
+	conversationHistory: ConversationMessage[] = [],
 	imageId?: string | null,
 ) {
 	try {
@@ -18,8 +27,62 @@ export async function generateResponse(
 			},
 		];
 
+		// Add conversation history to provide context
+		for (const historyMessage of conversationHistory) {
+			if (historyMessage.role === "user") {
+				if (historyMessage.imageId) {
+					// Handle historical image message
+					try {
+						const imageData = await downloadWhatsAppMedia(historyMessage.imageId);
+						if (imageData) {
+							messages.push({
+								role: "user",
+								content: [
+									{
+										type: "text",
+										text: historyMessage.content,
+									},
+									{
+										type: "image",
+										image: imageData,
+										providerOptions: {
+											openai: { imageDetail: "low" },
+										},
+									},
+								],
+							});
+						} else {
+							// If image failed to download, just include text
+							messages.push({
+								role: "user",
+								content: historyMessage.content,
+							});
+						}
+					} catch (error) {
+						console.error("Error downloading historical image:", error);
+						// Fallback to text only
+						messages.push({
+							role: "user",
+							content: historyMessage.content,
+						});
+					}
+				} else {
+					messages.push({
+						role: "user",
+						content: historyMessage.content,
+					});
+				}
+			} else {
+				messages.push({
+					role: "assistant",
+					content: historyMessage.content,
+				});
+			}
+		}
+
+		// Add current message
 		if (imageId) {
-			// Handle image message
+			// Handle current image message
 			const imageData = await downloadWhatsAppMedia(imageId);
 
 			if (!imageData) {

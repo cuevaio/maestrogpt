@@ -1,5 +1,6 @@
 import { generateResponse } from "@/ai/generate-reponse";
 import { NextRequest, NextResponse } from "next/server";
+import { getConversationHistory, storeMessage,  } from "@/lib/conversation";
 
 // WhatsApp API configuration
 const WHATSAPP_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN;
@@ -73,7 +74,27 @@ export async function POST(request: NextRequest) {
 			return NextResponse.json({ status: "success" }, { status: 200 });
 		}
 
-		const aiResponse = await generateResponse(messageContent, imageId);
+
+		// Get conversation history for context
+		const conversationHistory = await getConversationHistory(from);
+
+		// Store the incoming user message
+		await storeMessage(from, {
+			role: "user",
+			content: messageContent,
+			timestamp: Date.now(),
+			imageId: imageId || undefined,
+		});
+
+		// Generate AI response with conversation context
+		const aiResponse = await generateResponse(messageContent, conversationHistory, imageId);
+
+		// Store the AI response
+		await storeMessage(from, {
+			role: "assistant",
+			content: aiResponse,
+			timestamp: Date.now(),
+		});
 
 		const payload = {
 			messaging_product: "whatsapp",
