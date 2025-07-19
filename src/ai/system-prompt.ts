@@ -90,4 +90,4 @@ Technical details (if needed)
 
 *Found in RNE page X*
 
-_Disclaimer: Based on RNE. Consult professional for specific cases._`; 
+_Disclaimer: Based on RNE. Consult professional for specific cases._`;

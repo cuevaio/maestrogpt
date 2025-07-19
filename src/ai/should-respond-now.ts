@@ -1,65 +1,65 @@
-import { generateObject } from "ai";
 import { openai } from "@ai-sdk/openai";
+import { generateObject } from "ai";
 import type { ConversationMessage } from "./generate-reponse";
 
 export async function shouldRespondNow(
-	currentMessage: string,
-	conversationHistory: ConversationMessage[] = [],
-	hasImage: boolean = false,
+  currentMessage: string,
+  conversationHistory: ConversationMessage[] = [],
+  hasImage: boolean = false,
 ): Promise<boolean> {
-	// Get recent messages (last 10 messages or last 5 minutes)
-	const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
-	const recentMessages = conversationHistory
-		.filter((msg) => msg.timestamp > fiveMinutesAgo)
-		.slice(-10);
+  // Get recent messages (last 10 messages or last 5 minutes)
+  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+  const recentMessages = conversationHistory
+    .filter((msg) => msg.timestamp > fiveMinutesAgo)
+    .slice(-10);
 
-	// Format conversation context for analysis with timestamps
-	let conversationContext = "";
-	if (recentMessages.length > 0) {
-		conversationContext =
-			"Recent conversation (with timestamps):\n" +
-			recentMessages
-				.map((msg) => {
-					const date = new Date(msg.timestamp);
-					const timeStr = date.toLocaleTimeString("en-US", {
-						hour12: false,
-						hour: "2-digit",
-						minute: "2-digit",
-						second: "2-digit",
-					});
-					
-					// Show "[Image attached]" for image-only messages
-					let displayContent = msg.content;
-					if (msg.imageId && !msg.content.trim()) {
-						displayContent = "[Image attached]";
-					} else if (msg.imageId && msg.content.trim()) {
-						displayContent = `${msg.content} [Image attached]`;
-					}
-					
-					return `[${timeStr}] ${msg.role}: ${displayContent}`;
-				})
-				.join("\n") +
-			"\n";
-	}
+  // Format conversation context for analysis with timestamps
+  let conversationContext = "";
+  if (recentMessages.length > 0) {
+    conversationContext =
+      "Recent conversation (with timestamps):\n" +
+      recentMessages
+        .map((msg) => {
+          const date = new Date(msg.timestamp);
+          const timeStr = date.toLocaleTimeString("en-US", {
+            hour12: false,
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
 
-	const currentTime = new Date().toLocaleTimeString("en-US", {
-		hour12: false,
-		hour: "2-digit",
-		minute: "2-digit",
-		second: "2-digit",
-	});
+          // Show "[Image attached]" for image-only messages
+          let displayContent = msg.content;
+          if (msg.imageId && !msg.content.trim()) {
+            displayContent = "[Image attached]";
+          } else if (msg.imageId && msg.content.trim()) {
+            displayContent = `${msg.content} [Image attached]`;
+          }
 
-	// Show "[Image attached]" for image-only messages, consistent with history
-	let currentMessageDisplay = currentMessage;
-	if (hasImage && !currentMessage.trim()) {
-		currentMessageDisplay = "[Image attached]";
-	} else if (hasImage && currentMessage.trim()) {
-		currentMessageDisplay = `${currentMessage} [Image attached]`;
-	}
+          return `[${timeStr}] ${msg.role}: ${displayContent}`;
+        })
+        .join("\n") +
+      "\n";
+  }
 
-	conversationContext += `[${currentTime}] Current message: ${currentMessageDisplay}`;
+  const currentTime = new Date().toLocaleTimeString("en-US", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 
-	const prompt = `You are analyzing a WhatsApp conversation to decide if an AI assistant should respond now or wait for more messages.
+  // Show "[Image attached]" for image-only messages, consistent with history
+  let currentMessageDisplay = currentMessage;
+  if (hasImage && !currentMessage.trim()) {
+    currentMessageDisplay = "[Image attached]";
+  } else if (hasImage && currentMessage.trim()) {
+    currentMessageDisplay = `${currentMessage} [Image attached]`;
+  }
+
+  conversationContext += `[${currentTime}] Current message: ${currentMessageDisplay}`;
+
+  const prompt = `You are analyzing a WhatsApp conversation to decide if an AI assistant should respond now or wait for more messages.
 
 CONTEXT: Users often send their medical/health consultations in multiple short messages instead of one long message. We want to avoid responding too early before they finish explaining their complete situation.
 
@@ -182,24 +182,24 @@ Consider:
 
 Respond with your decision.`;
 
-	try {
-		const { object } = await generateObject({
-			model: openai("gpt-4o-mini"),
-			output: "enum",
-			enum: ["respond_now", "wait_for_more"],
-			prompt: prompt,
-		});
+  try {
+    const { object } = await generateObject({
+      model: openai("gpt-4o-mini"),
+      output: "enum",
+      enum: ["respond_now", "wait_for_more"],
+      prompt: prompt,
+    });
 
-		const shouldRespond = object === "respond_now";
-		console.log(
-			`AI Decision: ${object} for message: "${currentMessage}" (hasImage: ${hasImage})`,
-		);
+    const shouldRespond = object === "respond_now";
+    console.log(
+      `AI Decision: ${object} for message: "${currentMessage}" (hasImage: ${hasImage})`,
+    );
 
-		console.log(conversationContext);
-		return shouldRespond;
-	} catch (error) {
-		console.error("Error in shouldRespondNow:", error);
-		// Default to responding if AI decision fails
-		return true;
-	}
+    console.log(conversationContext);
+    return shouldRespond;
+  } catch (error) {
+    console.error("Error in shouldRespondNow:", error);
+    // Default to responding if AI decision fails
+    return true;
+  }
 }
