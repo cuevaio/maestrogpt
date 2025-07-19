@@ -1,5 +1,5 @@
 import { redis } from "@/clients/redis";
-import { ConversationMessage } from "@/ai/generate-reponse";
+import type { ConversationMessage } from "@/ai/generate-reponse";
 
 const CONVERSATION_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
 const MAX_MESSAGES = 10; // Maximum messages to keep for context
@@ -55,7 +55,18 @@ export async function getConversationHistory(
 		const parsedMessages: ConversationMessage[] = messages
 			.map(msg => {
 				try {
-					return JSON.parse(msg as string) as ConversationMessage;
+					// Handle both string and object cases
+					if (typeof msg === 'string') {
+						return JSON.parse(msg) as ConversationMessage;
+					} else if (typeof msg === 'object' && msg !== null) {
+						// If it's already an object, validate it has the right structure
+						const objMsg = msg as any;
+						if (objMsg.role && objMsg.content && objMsg.timestamp) {
+							return objMsg as ConversationMessage;
+						}
+					}
+					console.error("Invalid message format:", typeof msg, msg);
+					return null;
 				} catch (error) {
 					console.error("Error parsing message:", error);
 					return null;

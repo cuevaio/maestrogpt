@@ -79,20 +79,20 @@ export async function POST(request: NextRequest) {
 		const conversationHistory = await getConversationHistory(from);
 
 		// Use AI to decide if we should respond now or wait for more messages
-		const shouldAnswer = await shouldRespondNow(messageContent, conversationHistory);
+		const shouldAnswer = await shouldRespondNow(messageContent, conversationHistory, !!imageId);
 
-		if (!shouldAnswer) {
-			console.log("AI decided to wait for more messages");
-			return NextResponse.json({ status: "success" }, { status: 200 });
-		}
-
-		// Store the incoming user message
+		// Store the incoming user message (regardless of whether we respond)
 		await storeMessage(from, {
 			role: "user",
 			content: messageContent,
 			timestamp: Date.now(),
 			imageId: imageId || undefined,
 		});
+
+		if (!shouldAnswer) {
+			console.log("AI decided to wait for more messages");
+			return NextResponse.json({ status: "success" }, { status: 200 });
+		}
 
 		// Generate AI response with conversation context
 		const aiResponse = await generateResponse(messageContent, conversationHistory, imageId);

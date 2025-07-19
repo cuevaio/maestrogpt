@@ -4,8 +4,21 @@ import type { ConversationMessage } from "./generate-reponse";
 
 export async function shouldRespondNow(
 	currentMessage: string,
-	conversationHistory: ConversationMessage[] = []
+	conversationHistory: ConversationMessage[] = [],
+	hasImage: boolean = false
 ): Promise<boolean> {
+	// Handle special cases first
+	if (!currentMessage.trim() && hasImage) {
+		// Image-only message - usually means user is sharing visual information
+		// and likely expects a response
+		return true;
+	}
+	
+	if (!currentMessage.trim() && !hasImage) {
+		// Empty message without image - wait for more content
+		return false;
+	}
+
 	// Get recent messages (last 10 messages or last 5 minutes)
 	const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
 	const recentMessages = conversationHistory
@@ -21,7 +34,11 @@ export async function shouldRespondNow(
 				.join("\n") + "\n";
 	}
 	
-	conversationContext += `Current message: ${currentMessage}`;
+	const messageDescription = hasImage && !currentMessage.trim() 
+		? "[Image sent without caption]" 
+		: currentMessage;
+	
+	conversationContext += `Current message: ${messageDescription}`;
 
 	const prompt = `You are analyzing a WhatsApp conversation to decide if an AI assistant should respond now or wait for more messages.
 
@@ -79,6 +96,15 @@ Example 10 - RESPOND NOW:
 Recent: "I took the medication you suggested"
 Current: "The symptoms have improved significantly, thank you!"
 → Clear update and conclusion
+
+Example 11 - RESPOND NOW:
+"[Image sent without caption]"
+→ User shared visual information, likely expects analysis/response
+
+Example 12 - WAIT:
+Recent: "I have a rash"
+Current: "Let me send you"
+→ User is about to send something (likely an image)
 
 ANALYZE THIS CONVERSATION:
 ${conversationContext}
