@@ -15,9 +15,8 @@ export interface ConversationMessage {
 
 // Function to send reply message
 export async function generateResponse(
-  originalContent: string,
   conversationHistory: ConversationMessage[] = [],
-  imageId?: string | null,
+  _imageId?: string | null, // No longer used but kept for API compatibility
 ) {
   try {
     const messages: CoreMessage[] = [
@@ -82,37 +81,7 @@ export async function generateResponse(
       }
     }
 
-    // Add current message
-    if (imageId) {
-      // Handle current image message
-      const imageData = await downloadWhatsAppMedia(imageId);
-
-      if (!imageData) {
-        throw new Error("Failed to download image");
-      }
-
-      messages.push({
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: originalContent,
-          },
-          {
-            type: "image",
-            image: imageData,
-            providerOptions: {
-              openai: { imageDetail: "low" },
-            },
-          },
-        ],
-      });
-    } else {
-      messages.push({
-        role: "user",
-        content: originalContent,
-      });
-    }
+    // Current message is now included in conversationHistory, so no need to add it again
 
     const aiResponse = await generateText({
       model: openai("gpt-4.1"),

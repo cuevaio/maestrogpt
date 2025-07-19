@@ -98,12 +98,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ status: "success" }, { status: 200 });
     }
 
-    // Generate AI response with conversation context
-    const aiResponse = await generateResponse(
-      messageContent,
-      conversationHistory,
-      imageId,
-    );
+    // Get updated conversation history that includes the current message
+    const updatedConversationHistory = await getConversationHistory(from);
+
+    // Generate AI response with updated conversation context
+    const aiResponse = await generateResponse(updatedConversationHistory);
 
     // Store the AI response
     await storeMessage(from, {
