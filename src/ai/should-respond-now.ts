@@ -5,66 +5,47 @@ import type { ConversationMessage } from "./generate-reponse";
 export async function shouldRespondNow(
 	currentMessage: string,
 	conversationHistory: ConversationMessage[] = [],
-	hasImage: boolean = false
+	hasImage: boolean = false,
 ): Promise<boolean> {
-	// Handle special cases first
-	if (!currentMessage.trim() && hasImage) {
-		// Image-only message - usually means user is sharing visual information
-		// and likely expects a response
-		return true;
-	}
-	
-	if (!currentMessage.trim() && !hasImage) {
-		// Empty message without image - wait for more content
-		return false;
-	}
-
-	// Check for direct questions that should always get immediate responses
-	const directQuestionPatterns = [
-		/\?$/, // Ends with question mark
-		/^(what|who|when|where|why|how|cual|quien|cuando|donde|por que|como|que es)/i, // Question words
-		/^(es tu|cual es|que|dime|tell me|what is|who is)/i, // Direct inquiry patterns
-		/nombre\?/i, // Asking about name
-		/^(si|yes|no)\s*\?/i, // Yes/no questions
-	];
-	
-	if (directQuestionPatterns.some(pattern => pattern.test(currentMessage.trim()))) {
-		console.log("Direct question pattern detected, responding immediately");
-		return true;
-	}
-
-	// Additional check for very short messages that are clearly questions
-	const trimmedMessage = currentMessage.trim().toLowerCase();
-	if (trimmedMessage.length < 20 && (
-		trimmedMessage.includes('?') || 
-		trimmedMessage.startsWith('es ') ||
-		trimmedMessage.startsWith('que ') ||
-		trimmedMessage.startsWith('como ')
-	)) {
-		console.log("Short direct question detected, responding immediately");
-		return true;
-	}
-
 	// Get recent messages (last 10 messages or last 5 minutes)
 	const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
 	const recentMessages = conversationHistory
-		.filter(msg => msg.timestamp > fiveMinutesAgo)
+		.filter((msg) => msg.timestamp > fiveMinutesAgo)
 		.slice(-10);
 
-	// Format conversation context for analysis
+	// Format conversation context for analysis with timestamps
 	let conversationContext = "";
 	if (recentMessages.length > 0) {
-		conversationContext = "Recent conversation:\n" + 
+		conversationContext =
+			"Recent conversation (with timestamps):\n" +
 			recentMessages
-				.map(msg => `${msg.role}: ${msg.content}`)
-				.join("\n") + "\n";
+				.map((msg) => {
+					const date = new Date(msg.timestamp);
+					const timeStr = date.toLocaleTimeString("en-US", {
+						hour12: false,
+						hour: "2-digit",
+						minute: "2-digit",
+						second: "2-digit",
+					});
+					return `[${timeStr}] ${msg.role}: ${msg.content}`;
+				})
+				.join("\n") +
+			"\n";
 	}
-	
-	const messageDescription = hasImage && !currentMessage.trim() 
-		? "[Image sent without caption]" 
-		: currentMessage;
-	
-	conversationContext += `Current message: ${messageDescription}`;
+
+	const currentTime = new Date().toLocaleTimeString("en-US", {
+		hour12: false,
+		hour: "2-digit",
+		minute: "2-digit",
+		second: "2-digit",
+	});
+
+	const messageDescription =
+		hasImage && !currentMessage.trim()
+			? "[Image sent without caption]"
+			: currentMessage;
+
+	conversationContext += `[${currentTime}] Current message: ${messageDescription}${hasImage ? " (with image)" : ""}`;
 
 	const prompt = `You are analyzing a WhatsApp conversation to decide if an AI assistant should respond now or wait for more messages.
 
@@ -77,12 +58,16 @@ DECISION CRITERIA:
   * User indicates they're done explaining
   * Simple greetings or acknowledgments
   * Questions about identity, names, or basic info
+  * Image-only messages (user likely expects analysis/response)
+  * Message has clear intent even if brief
 
 - WAIT if:
   * Message seems incomplete or cut off
   * Ends with connecting words ("and", "also", "because", "but")
   * User is clearly building up to something
-  * Message is very brief without clear intent (unless it's a complete question)
+  * Message is very brief without clear intent
+  * Empty message without image
+  * User appears to be typing more (based on timing patterns)
 
 EXAMPLES:
 
@@ -156,6 +141,20 @@ Recent: "Tell me about construction"
 Current: "What materials should I use?"
 → Clear follow-up question
 
+Example 16 - WAIT:
+Empty message without image
+→ Wait for actual content
+
+Example 17 - RESPOND NOW:
+Empty message with image
+→ Visual information shared, likely expects response
+
+TIMING CONSIDERATIONS:
+- Look at timestamps to understand message flow and timing
+- If messages are sent very quickly (within seconds), user might still be typing
+- If there's a longer pause before the current message, it might be more complete
+- Consider the natural flow of conversation timing
+
 ANALYZE THIS CONVERSATION:
 ${conversationContext}
 
@@ -165,24 +164,30 @@ Consider:
 - Does it feel like a complete thought or partial explanation?
 - Are they still building context or providing background?
 - Does the message flow suggest more is coming?
+- What do the timestamps tell us about the user's messaging pattern?
+- Is this an empty message? With or without an image?
+- Does the timing suggest the user is still actively composing more messages?
 
 Respond with your decision.`;
 
 	try {
 		const { object } = await generateObject({
-			model: openai('gpt-4o-mini'),
-			output: 'enum',
-			enum: ['respond_now', 'wait_for_more'],
+			model: openai("gpt-4o-mini"),
+			output: "enum",
+			enum: ["respond_now", "wait_for_more"],
 			prompt: prompt,
 		});
 
-		const shouldRespond = object === 'respond_now';
-		console.log(`AI Decision: ${object} for message: "${currentMessage}" (hasImage: ${hasImage})`);
-		
+		const shouldRespond = object === "respond_now";
+		console.log(
+			`AI Decision: ${object} for message: "${currentMessage}" (hasImage: ${hasImage})`,
+		);
+
+		console.log(conversationContext);
 		return shouldRespond;
 	} catch (error) {
-		console.error('Error in shouldRespondNow:', error);
+		console.error("Error in shouldRespondNow:", error);
 		// Default to responding if AI decision fails
 		return true;
 	}
-} 
+}
