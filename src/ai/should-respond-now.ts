@@ -19,6 +19,32 @@ export async function shouldRespondNow(
 		return false;
 	}
 
+	// Check for direct questions that should always get immediate responses
+	const directQuestionPatterns = [
+		/\?$/, // Ends with question mark
+		/^(what|who|when|where|why|how|cual|quien|cuando|donde|por que|como|que es)/i, // Question words
+		/^(es tu|cual es|que|dime|tell me|what is|who is)/i, // Direct inquiry patterns
+		/nombre\?/i, // Asking about name
+		/^(si|yes|no)\s*\?/i, // Yes/no questions
+	];
+	
+	if (directQuestionPatterns.some(pattern => pattern.test(currentMessage.trim()))) {
+		console.log("Direct question pattern detected, responding immediately");
+		return true;
+	}
+
+	// Additional check for very short messages that are clearly questions
+	const trimmedMessage = currentMessage.trim().toLowerCase();
+	if (trimmedMessage.length < 20 && (
+		trimmedMessage.includes('?') || 
+		trimmedMessage.startsWith('es ') ||
+		trimmedMessage.startsWith('que ') ||
+		trimmedMessage.startsWith('como ')
+	)) {
+		console.log("Short direct question detected, responding immediately");
+		return true;
+	}
+
 	// Get recent messages (last 10 messages or last 5 minutes)
 	const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
 	const recentMessages = conversationHistory
@@ -45,8 +71,18 @@ export async function shouldRespondNow(
 CONTEXT: Users often send their medical/health consultations in multiple short messages instead of one long message. We want to avoid responding too early before they finish explaining their complete situation.
 
 DECISION CRITERIA:
-- RESPOND NOW if the message seems complete, asks a direct question, or indicates the user is done
-- WAIT if the message seems incomplete, ends abruptly, or appears to be part of a longer explanation
+- RESPOND NOW if:
+  * Message asks a direct question (ends with ?, starts with question words)
+  * Message seems complete and coherent
+  * User indicates they're done explaining
+  * Simple greetings or acknowledgments
+  * Questions about identity, names, or basic info
+
+- WAIT if:
+  * Message seems incomplete or cut off
+  * Ends with connecting words ("and", "also", "because", "but")
+  * User is clearly building up to something
+  * Message is very brief without clear intent (unless it's a complete question)
 
 EXAMPLES:
 
@@ -106,6 +142,20 @@ Recent: "I have a rash"
 Current: "Let me send you"
 → User is about to send something (likely an image)
 
+Example 13 - RESPOND NOW:
+Recent: "Dime cual"
+Current: "es tu nombre"
+→ Direct question asking for name, requires immediate response
+
+Example 14 - RESPOND NOW:
+"what is your name?"
+→ Direct question, clear intent
+
+Example 15 - RESPOND NOW:
+Recent: "Tell me about construction"
+Current: "What materials should I use?"
+→ Clear follow-up question
+
 ANALYZE THIS CONVERSATION:
 ${conversationContext}
 
@@ -126,7 +176,10 @@ Respond with your decision.`;
 			prompt: prompt,
 		});
 
-		return object === 'respond_now';
+		const shouldRespond = object === 'respond_now';
+		console.log(`AI Decision: ${object} for message: "${currentMessage}" (hasImage: ${hasImage})`);
+		
+		return shouldRespond;
 	} catch (error) {
 		console.error('Error in shouldRespondNow:', error);
 		// Default to responding if AI decision fails

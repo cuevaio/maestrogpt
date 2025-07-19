@@ -61,7 +61,7 @@ export async function getConversationHistory(
 					} else if (typeof msg === 'object' && msg !== null) {
 						// If it's already an object, validate it has the right structure
 						const objMsg = msg as any;
-						if (objMsg.role && objMsg.content && objMsg.timestamp) {
+						if (objMsg.role && typeof objMsg.content === 'string' && objMsg.timestamp) {
 							return objMsg as ConversationMessage;
 						}
 					}
