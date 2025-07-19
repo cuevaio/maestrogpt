@@ -27,7 +27,16 @@ export async function shouldRespondNow(
 						minute: "2-digit",
 						second: "2-digit",
 					});
-					return `[${timeStr}] ${msg.role}: ${msg.content}`;
+					
+					// Show "[Image attached]" for image-only messages
+					let displayContent = msg.content;
+					if (msg.imageId && !msg.content.trim()) {
+						displayContent = "[Image attached]";
+					} else if (msg.imageId && msg.content.trim()) {
+						displayContent = `${msg.content} [Image attached]`;
+					}
+					
+					return `[${timeStr}] ${msg.role}: ${displayContent}`;
 				})
 				.join("\n") +
 			"\n";
@@ -40,12 +49,15 @@ export async function shouldRespondNow(
 		second: "2-digit",
 	});
 
-	const messageDescription =
-		hasImage && !currentMessage.trim()
-			? "[Image sent without caption]"
-			: currentMessage;
+	// Show "[Image attached]" for image-only messages, consistent with history
+	let currentMessageDisplay = currentMessage;
+	if (hasImage && !currentMessage.trim()) {
+		currentMessageDisplay = "[Image attached]";
+	} else if (hasImage && currentMessage.trim()) {
+		currentMessageDisplay = `${currentMessage} [Image attached]`;
+	}
 
-	conversationContext += `[${currentTime}] Current message: ${messageDescription}${hasImage ? " (with image)" : ""}`;
+	conversationContext += `[${currentTime}] Current message: ${currentMessageDisplay}`;
 
 	const prompt = `You are analyzing a WhatsApp conversation to decide if an AI assistant should respond now or wait for more messages.
 
@@ -119,7 +131,7 @@ Current: "The symptoms have improved significantly, thank you!"
 → Clear update and conclusion
 
 Example 11 - RESPOND NOW:
-"[Image sent without caption]"
+"[Image attached]"
 → User shared visual information, likely expects analysis/response
 
 Example 12 - WAIT:
